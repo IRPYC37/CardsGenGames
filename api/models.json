@@ -1,0 +1,7 @@
+{
+    "models": [
+            "gsdf/Counterfeit-V2.5",
+            "Lykon/DreamShaper",
+            "Meina/MeinaMix_V10"
+    ]   
+}
