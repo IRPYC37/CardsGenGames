@@ -3,6 +3,7 @@ from fastapi import FastAPI, Response
 from fastapi.middleware.cors import CORSMiddleware
 import torch
 from torch import autocast
+from torch.cuda.amp import autocast
 from diffusers import StableDiffusionPipeline
 from io import BytesIO
 import base64 
@@ -27,10 +28,6 @@ appli.add_middleware(
     allow_methods=["*"], 
     allow_headers=["*"]
 )
-device = "cuda"
-model_id = "gsdf/Counterfeit-V2.5"
-pipe = StableDiffusionPipeline.from_pretrained(model_id, torch_dtype=torch.float16, use_auth_token=auth_token)
-pipe.to(device)
 
 ################################################################################################################################################################################
 with open('prompt.json', 'r') as prompt_stable:
@@ -42,29 +39,22 @@ with open('models.json', 'r') as models_stable:
 with open('count.json', 'r') as counter:
         countable = json.load(counter)
 
-details = "(8k, RAW photo, best quality, cinematic, masterpiece:5, ultra-detailed, beautiful, detailed environment, amazing lighting,  cinematic lighting, high quality, highly detailed, RTX )"
-negative = "(mark, text, EasyNegative, paintings, sketches, (worst quality:2), (low quality:2), (normal quality:2), lowres, (monochrome), (grayscale), skin spots, acnes, skin blemishes, age spot, glans,extra fingers,fewer fingers,strange fingers,bad hand,signature, watermark, username, blurry, bad feet,bad leg, duplicate, extra limb, ugly, disgusting, poorly drawn hands, missing limb, floating limbs, disconnected limbs, malformed hands, blurry,mutated hands and fingers, EasyNegative, paintings, sketches, (worst quality:2), (low quality:2), (normal quality:2), lowres, (monochrome), (grayscale), skin spots, acnes, skin blemishes, age spot, glans,extra fingers,fewer fingers,strange fingers,bad hand,bad nails,signature, watermark, username, blurry, bad feet,bad leg)"
-
+details = "(4K, cinematic, high quality, impressive, grandiose, highly detailed, masterpiece:8, ultra-detailed, beautiful, detailed environment, amazing lighting, RTX)"
+negative = "(NSFW,mark, text, EasyNegative, paintings, sketches, (worst quality:2), (low quality:2), (normal quality:2), lowres, (monochrome), (grayscale), skin spots, acnes, skin blemishes, age spot, glans,extra fingers,fewer fingers,strange fingers,bad hand,signature, watermark, username, blurry, bad feet,bad leg, duplicate, extra limb, ugly, disgusting, poorly drawn hands, missing limb, floating limbs, disconnected limbs, malformed hands, blurry,mutated hands and fingers, EasyNegative, paintings, sketches, (worst quality:2), (low quality:2), (normal quality:2), lowres, (monochrome), (grayscale), skin spots, acnes, skin blemishes, age spot, glans,extra fingers,fewer fingers,strange fingers,bad hand,bad nails,signature, watermark, username, blurry, bad feet,bad leg)"
 ################################################################################################################################################################################
 @appli.get("/generate/")
 def generate(): 
-    global prompt
     prompt = generate_prompt()
-    random_models = random.randint(0, len(list_models))
+    random_models = random.randint(0, len(list_models["models"])-1)
+    steps=list_models["steps"]
+  
+    try : #  Utilisation du GPU
+        pipe = generate_from_gpu(random_models)
+    except: ##  Utilisation du CPU (si non GPU/non cuda)
+        pipe = generate_from_cpu(random_models)
 
-    with autocast(device): 
-        global pipe
-        pipe = StableDiffusionPipeline.from_pretrained(list_models["models"][random_models], torch_dtype=torch.float16, use_auth_token=auth_token)
-        pipe.to(device)
-        image = pipe(prompt+details, guidance_scale=8.5,num_inference_steps=100,negative_prompt=negative, height=768, width=512).images[0]
-        
-    """Gestion des images"""
-    image.save('../img/image_'+get_count()+'.png')
-    increment_count()
-
-    buffer = BytesIO()
-    image.save(buffer, format="PNG") 
-    imgstr = base64.b64encode(buffer.getvalue()) 
+    image = pipe(prompt+details, guidance_scale=8.5,num_inference_steps=steps,negative_prompt=negative, height=768, width=512).images[0]
+    imgstr = gestion_save_image(image)
 
     return Response(content=imgstr, media_type="image/png")
 
@@ -83,30 +73,82 @@ def get_count():
 def get_count_save():
     return int(get_count())-1
 
+################################################################################################################################
+#                                                        PROMPT                                                                #
+################################################################################################################################
 def generate_prompt():
     """ Génére une race aléatoire """
-    random_race = random.randint(0, len(list_prompt["race"]))
+    random_race = random.randint(0, len(list_prompt["race"])-1)
     prompt_race = list_prompt["race"][random_race]
 
     """ Génére un sexe aléatoire """
-    random_sex = random.randint(0, len(list_prompt["sex"]))
+    random_sex = random.randint(0, len(list_prompt["sex"])-1)
     try:
         prompt_sex = list_prompt["sex"][random_sex]
     except:
+        print("error !")
         prompt_sex = list_prompt["sex"][1]
 
     """ Génére une actions aléatoire """
-    random_actions = random.randint(0, len(list_prompt["actions"]))
-    prompt_actions = list_prompt["actions"][random_actions]
+    random_actions = random.randint(0, len(list_prompt["actions"])-1)
+    try:
+        prompt_actions = list_prompt["actions"][random_actions]
+    except:
+        prompt_actions = list_prompt["actions"][len(list_prompt["actions"])-1]
 
     """ Génére un environments aléatoire """
-    random_environments = random.randint(0, len(list_prompt["environments"]))
+    random_environments = random.randint(0, len(list_prompt["environments"])-1)
     prompt_environments = list_prompt["environments"][random_environments]
 
-    return "A "+prompt_sex+" "+prompt_race+" is "+prompt_actions+" in a "+prompt_environments+"."
+    """ Génére des couleurs de cheuveux aléatoire """
+    random_HColor = random.randint(0, len(list_prompt["hairColors"])-1)
+    prompt_HColor = list_prompt["hairColors"][random_HColor]
+
+    """ Génére un style de coifure aléatoire """
+    random_HStyle = random.randint(0, len(list_prompt["hairStyles"])-1)
+    prompt_HStyle = list_prompt["hairStyles"][random_HStyle]
+
+    """ Génére une couleur d'yeux aléatoire """
+    random_EyeColor = random.randint(0, len(list_prompt["eyeColors"])-1)
+    prompt_EyeColor = list_prompt["eyeColors"][random_EyeColor]
+
+    """ Génére un objet aléatoire """
+    random_object = random.randint(0, len(list_prompt["fantasyObjects"])-1)
+    prompt_object = list_prompt["fantasyObjects"][random_object]
+
+    
+
+    return "A "+prompt_sex+" "+prompt_race+" is "+prompt_actions+" in a "+prompt_environments+"."+" "+prompt_HStyle+" "+prompt_HColor+" hair."+" "+prompt_EyeColor+" eyes."+" "+prompt_object
+
+################################################################################################################################
+def generate_from_cpu(random_models):
+    device = "cpu"
+    with torch.no_grad():
+        pipe = StableDiffusionPipeline.from_pretrained(list_models["models"][random_models], use_auth_token=auth_token)
+        pipe.to(device)
+        return pipe
+        
+
+def generate_from_gpu(random_models):
+    device = "cuda" # Utilisation du GPU (default device)
+    with autocast(device):
+        with torch.no_grad():
+            pipe = StableDiffusionPipeline.from_pretrained(list_models["models"][random_models],torch_dtype=torch.float16, use_auth_token=auth_token) 
+            pipe.to(device)
+            return pipe
 
 
-
+def gestion_save_image(image):
+    image.save('../img/image_'+get_count()+'.png')
+    buffer = BytesIO()
+    image.save(buffer, format="PNG") 
+    imgstr = base64.b64encode(buffer.getvalue())
+    size_in_bytes = buffer.getbuffer().nbytes
+    if size_in_bytes == 1224:
+        generate()
+    else:
+        increment_count()
+        return imgstr
 
 ########################################################################################################################################################################
 #                                                                               Gestion des images                                                                     #
@@ -160,7 +202,9 @@ def addPlayer(player : str):
             print("Player already added")
 
 @appli.get('/getListPersonnages/')
-def getListPersonnages(player : str):
+def getListPersonnages(player):
+    print("test") 
     with open('players.json', 'r') as fichier_json:
-        players = json.load(fichier_json)   
-    return players["players"][players]
+        players = json.load(fichier_json)
+          
+    return players["players"][player]

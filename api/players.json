@@ -1,6 +1,8 @@
 {
     "players": {
-        "IRPYC": [],
+        "IRPYC": [
+            "..\\img\\image_28.png"
+        ],
         "others": [],
         "amasu": []
     }

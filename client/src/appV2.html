@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CardsGameAi</title>
+  <!-- Ajoutez le lien vers les styles Chakra-UI si nécessaire -->
+</head>
+<body>
+
+<div id="app-container">
+  <h1>⚔ CardsGameAi ⚔</h1>
+  <p>Ouvre tes coffres et découvre ton nouveau personnage !</p>
+
+  <div>
+    <button onclick="generate()" style="background-color: yellow;">Ouvrir</button>
+  </div>
+
+  <div id="image-container"></div>
+  
+  <button onclick="addToPlayer('IRPYC', image)" style="background-color: yellow;">Recruter 📜</button>
+  <button onclick="getListPersonnages('IRPYC')" style="background-color: yellow;">Voir la liste 📜</button>
+
+  <div id="list-image-container"></div>
+</div>
+
+<script>
+  let image;
+  let loading = false;
+  let loadingImg = false;
+  let lstImg;
+
+  function generate() {
+    loading = true;
+    // Utilisez fetch ou une autre méthode pour effectuer la requête HTTP
+    fetch('http://127.0.0.1:8000/generate/')
+      .then(response => response.json())
+      .then(data => {
+        image = data;
+        loading = false;
+        updateImage();
+      });
+  }
+
+  function addToPlayer(player, img) {
+    loading = true;
+    // Utilisez fetch ou une autre méthode pour effectuer la requête HTTP
+    fetch('http://127.0.0.1:8000/addToPlayer/', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        player: player,
+        img: img,
+      }),
+    })
+      .then(() => {
+        loading = false;
+        updateImage();
+      });
+  }
+
+  function getListPersonnages(player) {
+    loadingImg = true;
+    // Utilisez fetch ou une autre méthode pour effectuer la requête HTTP
+    fetch(`http://127.0.0.1:8000/getListPersonnages/?player=${player}`)
+      .then(response => response.json())
+      .then(data => {
+        lstImg = data;
+        loadingImg = false;
+        updateListImage();
+      });
+  }
+
+  function updateImage() {
+    const imageContainer = document.getElementById('image-container');
+    imageContainer.innerHTML = '';
+    
+    if (loading) {
+      imageContainer.innerHTML = '<div>Loading...</div>';
+    } else if (image) {
+      const imgElement = document.createElement('img');
+      imgElement.src = `data:image/png;base64,${image}`;
+      imgElement.style.boxShadow = 'lg';
+      imageContainer.appendChild(imgElement);
+    }
+  }
+
+  function updateListImage() {
+    const listImageContainer = document.getElementById('list-image-container');
+    listImageContainer.innerHTML = '';
+
+    if (loadingImg) {
+      listImageContainer.innerHTML = '<div>Loading...</div>';
+    } else if (lstImg) {
+      const imgElement = document.createElement('img');
+      imgElement.src = `data:image/png;base64,${lstImg}`;
+      imgElement.style.boxShadow = 'lg';
+      listImageContainer.appendChild(imgElement);
+    }
+  }
+</script>
+
+</body>
+</html>

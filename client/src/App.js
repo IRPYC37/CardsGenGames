@@ -16,6 +16,7 @@ import { useState } from "react";
 const App = () => {
   const [image, updateImage] = useState();
   const [loading, updateLoading] = useState();
+  const [loadingImg, updateLoadingImg] = useState();
   const [lstImg, updateLstImg] = useState();
 
   const generate = async () => {
@@ -35,11 +36,16 @@ const App = () => {
   };
 
   const getListPersonnages = async (player) => {
-    updateLoading(true);
-    const result = await axios.get(`http://127.0.0.1:8000/getListPersonnages/`);
-    updateLstImg(result)
-    updateLoading(false);
-  };
+      try {
+        updateLoadingImg(true);
+        const result = await axios.get(`http://127.0.0.1:8000/getListPersonnages/${player}`);
+        updateLstImg(result.data);
+      } catch (error) {
+        console.error(`Erreur lors de la récupération de la liste des personnages pour le joueur ${player} :`, error);
+      } finally {
+        updateLoadingImg(false);
+      }
+    };
 
 
   const player = "IRPYC";
@@ -72,6 +78,14 @@ const App = () => {
         <Button onClick={(j) => getListPersonnages(player)} colorScheme={"yellow"} >
             Voir la liste 📜
         </Button>
+        {loadingImg ? (
+          <Stack>
+            <SkeletonCircle />
+            <SkeletonText />
+          </Stack>
+        ) : lstImg ? (
+          <Image src={`data:image/png;base64,${lstImg}`} boxShadow="lg" />
+        ) : null}
         
       </Container>
     </ChakraProvider>
